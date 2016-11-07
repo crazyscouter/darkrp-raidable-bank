@@ -1,195 +1,187 @@
 if (CLIENT) then return; end
 
+ndoc.table.rBank = ndoc.table.rBank or {}
+ndoc.table.rBank.players = {}
+ndoc.table.rBank.currency = ndoc.table.rBank.currency or bankConfig.initialMoney
+ndoc.table.rBank.beingRobbed = 0
+ndoc.table.rBank.inVault = 0
+
+local inVault, beingRobbed = false, false
+
 AddCSLuaFile("cl_bank.lua");
 AddCSLuaFile("sh_bank.lua");
 include("sh_bank.lua");
 
-SetGlobalFloat("bank_money", bankConfig.initialMoney);
-local moneyCur;
-local beingRobbed = false;
-local weaponsgave = false;
-local invault = false;
+local meta = FindMetaTable("Player")
 
-local function start()
-
+function meta:isBankGuard()
+	return table.HasValue(bankConfig.bankGuards, self:Team()) or self:isCP()
 end
 
-local function giveGuardWeapons(ply)
+function meta:giveGuardWeapons()
+	if (self.hasGuardWeapons) then return end
+
 	for k,v in pairs(bankConfig.bankGuardWeapons) do
-		if (!ply:isCP()) then
-			ply:Give(v);
-		end
+		self:Give(v)
 	end
+
+	self.hasGuardWeapons = true
 end
 
-local function stripGuardWeapons(ply)
-	for k, v in pairs(bankConfig.bankGuardWeapons) do
-		if (ply:HasWeapon(v) && !ply:isCP()) then
-			ply:StripWeapon(v);
-		end
-	end
-end
+function meta:stripGuardWeapons()
+	if (!self.hasGuardWeapons) then return end
 
-local function bankRobbedNotify(text)
-	for k,v in pairs(player.GetAll()) do 
-		//if (isGuard(v)) then //as long as the cop doesn't get the guns.
-			v:PrintMessage(HUD_PRINTCENTER, text);
-		//end
+	for k,v in pairs(bankConfig.bankGuardWeapons) do
+		self:StripWeapon(v)
 	end
-end
 
-local function bankDoneRobbedNotify(text)
-
-	for k,v in pairs(player.GetAll()) do 
-		//if (isGuard(v))) then
-			v:PrintMessage(HUD_PRINTCENTER, text);
-		//end
-	end
-end
-
-local function Notify(text)
-	for k,v in pairs(player.GetAll()) do
-		v:PrintMessage(HUD_PRINTTALK, text);
-	end
+	self.hasGuardWeapons = false
 end
 
 hook.Add("InitPostEntity", "StartBankStuff", function()
 	
 	timer.Create("bank_growthTimer", bankConfig.moneyGrowthTime, 0, function()
-		moneyCur = GetGlobalFloat("bank_money") + bankConfig.moneyGrowth //We can continue to update as long as it is still good.
+		local moneyCur = ndoc.table.rBank.currency + bankConfig.moneyGrowth //We can continue to update as long as it is still good.
 		
-		if (moneyCur > bankConfig.maxMoney) then
-			SetGlobalFloat("bank_money", bankConfig.maxMoney);			
-		else
-			SetGlobalFloat("bank_money", moneyCur);
-		end
+		if (moneyCur > bankConfig.maxMoney) then return end
+		
+		ndoc.table.rBank.currency = moneyCur
+		
 	end)
 end)
 
+/* From Facepunch */
 local function WithinAABB( Start, Stop, Point )
-
 	local x = (Point.x > Stop.x and Point.x < Start.x ) or ( Point.x < Stop.x and Point.x > Start.x);
 	local y = (Point.y > Stop.y and Point.y < Start.y ) or ( Point.y < Stop.y and Point.y > Start.y);
 	local z = (Point.z > Stop.z and Point.z < Start.z ) or ( Point.z < Stop.z and Point.z > Start.z);
 
 	return (x and y and z);
-
 end
 
-local function isGuard(ply)
-	local t = ply:Team();
-	
-	for k,v in pairs(bankConfig.bankGuards) do
-		if (t == v || ply:isCP()) then return true; end
-	end
-	
-	return false
-end
+/*
+	Returns: players in vault, players in bank, guards in bank
+*/
+local function getPlayersInBank()	
+	local pos1 = bankConfig.bank[1];
+	local pos2 = bankConfig.bank[2];
+	local pos3 = bankConfig.vault[1];
+	local pos4 = bankConfig.vault[2];
 
-local function playersInBank()
-
-	local count = 0;
-	
-	local pos1 = bankConfig.bankPos[1];
-	local pos2 = bankConfig.bankPos[2];
-	local pos3 = bankConfig.bankVault[1];
-	local pos4 = bankConfig.bankVault[2];
+	local pInBank  = {}
+	local pInVault = {}
+	local guardsInBank = {}
 	
 	for k,v in pairs(player.GetAll()) do
-		if (WithinAABB(pos3, pos4, v:GetPos()) && !isGuard(v)) then
-			count = count + 1;
-		elseif (WithinAABB(pos1, pos2, v:GetPos()) && !isGuard(v)) then
-			count = count + 1;
+		if (WithinAABB(pos3, pos4, v:GetPos())) then
+			
+			if (v:isBankGuard()) then
+				table.insert(guardsInBank, v)
+			else
+				table.insert(pInVault, v)
+			end
+
+			if (ndoc.table.rBank.players[ v ] == nil) then
+				ndoc.table.rBank.players[ v ] = v:isBankGuard() and 1 or 2
+			end
+
+			continue
+		elseif (WithinAABB(pos1, pos2, v:GetPos())) then
+
+			if (v:isBankGuard()) then
+				table.insert(guardsInBank, v)
+			else
+				table.insert(pInBank, v)
+			end
+
+			if (ndoc.table.rBank.players[ v ] == nil) then
+				ndoc.table.rBank.players[ v ] = v:isBankGuard() and 1 or 2
+			end
+
+			continue
+		elseif (ndoc.table.rBank.players[ v ] ~= nil) then
+
+			if (v:isBankGuard()) then
+				v:stripGuardWeapons()
+			end
+
+			ndoc.table.rBank.players[ v] = nil
 		end
 	end
-	return count;
+	
+	return pInVault, pInBank, guardsInBank
 end
 
-local function Breakinto()
+local function doBreakInto()
+	local robTime = bankConfig.robTime
 
-	local count = bankConfig.robTime;
-	local pos1 = bankConfig.bankPos[1];
-	local pos2 = bankConfig.bankPos[2];
-	
-	if (timer.Exists("BankTimeLeft")) then timer.Destroy("BankTimeLeft"); end
-	if (timer.Exists("BankTimeLeftReal")) then timer.Destroy("BankTimeLeftReal"); end
-	
-	timer.Create("BankTimeLeft", 1, bankConfig.robTime, function()
-		
-		count = count - 1;
-		for k,v in pairs(player.GetAll()) do
-			if (WithinAABB(pos1, pos2, v:GetPos())) then
-				v:PrintMessage(HUD_PRINTTALK, "You must hold down the bank for "..count.." more seconds!");
-			end
-		end
-	end)
-	
-	timer.Create("BankTimeLeftReal",bankConfig.robTime + 1, 1, function()
+	ndoc.table.rBank.robTime = robTime
+	beingRobbed = true
 
-		local realMoney = GetGlobalFloat("bank_money");
-		
-		if (playersInBank() > 0) then
-			local moneyPerPerson = (realMoney / playersInBank());
-			for k,v in pairs(player.GetAll()) do
-				if (WithinAABB(pos1, pos2, v:GetPos()) && !isGuard(v)) then
-					v:PrintMessage(HUD_PRINTTALK, "You have raided the bank, and got $"..moneyPerPerson);
-					v:addMoney(math.Round(moneyPerPerson));
-					SetGlobalFloat("bank_money", bankConfig.initialMoney);
-				end
+	if (timer.Exists('bankTimeLeft')) then timer.Destroy('bankTimeLeft') end
+
+	
+	timer.Create('bankTimeLeft', 1, robTime + 1, function()
+		if (ndoc.table.rBank.robTime == 0) then
+
+			local inVault, inBank = getPlayersInBank()
+			local combined = table.Merge(inVault, inBank)
+			local money = ndoc.table.rBank.currency
+			local moneyPP = money / #combined
+
+			for k,v in pairs(combined) do
+				v:addMoney(moneyPP)
 			end
+
+			ndoc.table.rBank.currency = bankConfig.initialMoney
 		end
+		
+		ndoc.table.rBank.robTime = ndoc.table.rBank.robTime - 1
 	end)
 end
 
 hook.Add("Think", "DetectPlayerInBank", function()
+	local pInVault, pInBank, guardsInBank = getPlayersInBank()
 
-	local pos1 = bankConfig.bankPos[1];
-	local pos2 = bankConfig.bankPos[2];
-	local pos3 = bankConfig.bankVault[1];
-	local pos4 = bankConfig.bankVault[2];
+	for k,v in pairs(guardsInBank) do
+		v:giveGuardWeapons()
+	end
 
-	for k,v in pairs(player.GetAll()) do 
-	
-		local pos = v:GetPos();
+	if (#pInVault > 0) then
+		if (ndoc.table.rBank.currency < bankConfig.minMoney) then return end
 		
-		if (WithinAABB(pos1, pos2, pos)) then //the player has entered the vault!
-		
-			if (GetGlobalFloat("bank_money") < bankConfig.minMoney) then return; end
+		if (!inVault) then
 			
-			if (!invault && !isGuard(v) && playersInBank() >= 1) then
-				bankRobbedNotify("The robbers have broken into the vault!");
-				Breakinto() //the robbers got to the vault, let's start the timer, and if they are still there when it's done, give them the money!
-				invault = true;
-			end
-		elseif (WithinAABB(pos3, pos4, pos)) then		//Someone is in the bank
-		
-			if (GetGlobalFloat("bank_money") < bankConfig.minMoney) then return; end
-			
-			if (isGuard(v)) then //We have a guard in the bank, what should we do
-				if (!weaponsgave) then
-					giveGuardWeapons(v);
-					weaponsgave = true;
-				end
-			else
-				if (!beingRobbed && playersInBank() >= 1) then
-					bankRobbedNotify("The bank has been broken into!");
-					beingRobbed = true;
-				end
-			end
-		else //Not in the bank or the vault
-			if (isGuard(v)) then //We have a guard outside the bank, take their guns
-				if (weaponsgave) then
-					stripGuardWeapons(v);
-					weaponsgave = false;
-				end
-			else
-				if (beingRobbed && playersInBank() <= 1 && (!WithinAABB(pos1, pos2, pos))) then
-					bankDoneRobbedNotify("The bank is no longer being robbed");
-					beingRobbed = false;
-					invault = false;
-				end
-			end
+			ndoc.table.rBank.inVault = 1
+			inVault = true
+			doBreakInto()
+
 		end
 		
+	elseif (#pInBank > 0) then
+		if (ndoc.table.rBank.currency < bankConfig.minMoney) then return end
+
+		if (!beingRobbed) then
+
+			beingRobbed = true
+			ndoc.table.rBank.beingRobbed = 1
+
+		end
+
+	else
+		if (inVault && #pInVault == 0) then
+			inVault = false
+			ndoc.table.rBank.inVault = 0
+		end
+
+		if (beingRobbed && #pInBank == 0) then
+			beingRobbed = false
+			ndoc.table.rBank.beingRobbed = 0
+		end
+
+		if (!beingRobbed && !inVault) then
+			--DONE RAIDING
+			timer.Destroy('bankTimeLeft')
+		end
 	end
 end)

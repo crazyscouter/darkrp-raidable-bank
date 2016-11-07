@@ -1,13 +1,19 @@
 bankConfig = {};
-bankConfig.bankPos = {
-	Vector(-1172.042480, 1386.968750, -200.968750), 
-	Vector(-1318.102539, 1151.031250, -78.183167)
+
+bankConfig.bank = {
+	Vector( -3024.888428, -3327.741211, 0.263596), 
+	Vector(-4235.753906, -3577.024902, 332.977539)
 };												// Where is the bank located.
-bankConfig.bankVault = {
-	Vector(-792.031250, 1258.951538, -87.968750), 
-	Vector(-1172.066406, 1386.968750, -200.968750)
+bankConfig.vault = {
+	Vector(-4235.753906, -3577.024902, 332.977539), 
+	Vector(-3717.154541, -4346.132324, 18.334160)
 }
-bankConfig.bankGuards = {TEAM_POLICE};			// What teams are considered "bank security".
+
+bankConfig.bannerPos = Vector(-2816, -2930, 250.183456)
+bankConfig.bannerAngle = Angle(0, 135, 90)
+
+bankConfig.bankGuards = {TEAM_POLICE, TEAM_MAYOR}
+
 bankConfig.bankGuardWeapons = {"weapon_ar2"};	// What weapons do bank security get.
 bankConfig.initialMoney = 1000;						// How much money does the bank start out with.
 bankConfig.moneyGrowth = 200;						// How much money does the bank get every interval of time.
