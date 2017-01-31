@@ -1,4 +1,4 @@
-include("sh_bank.lua");
+include("sh_bank.lua")
 
 local maxMoney = bankConfig.maxMoney
 
