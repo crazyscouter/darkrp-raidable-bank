@@ -1,4 +1,4 @@
-if (CLIENT) then return; end
+if (CLIENT) then return end
 
 ndoc.table.rBank = ndoc.table.rBank or {}
 ndoc.table.rBank.players = {}
@@ -8,10 +8,14 @@ ndoc.table.rBank.inVault = 0
 
 local inVault, beingRobbed = false, false
 
-AddCSLuaFile("cl_bank.lua");
-AddCSLuaFile("sh_bank.lua");
-include("sh_bank.lua");
+AddCSLuaFile("cl_bank.lua")
+AddCSLuaFile("sh_bank.lua")
+include("sh_bank.lua")
 
+
+/*
+	Meta functions.
+*/
 local meta = FindMetaTable("Player")
 
 function meta:isBankGuard()
@@ -50,23 +54,23 @@ hook.Add("InitPostEntity", "StartBankStuff", function()
 	end)
 end)
 
-/* From Facepunch */
+/* Computes if a point is within a lower corner and upper corner.*/
 local function WithinAABB( Start, Stop, Point )
 	local x = (Point.x > Stop.x and Point.x < Start.x ) or ( Point.x < Stop.x and Point.x > Start.x);
 	local y = (Point.y > Stop.y and Point.y < Start.y ) or ( Point.y < Stop.y and Point.y > Start.y);
 	local z = (Point.z > Stop.z and Point.z < Start.z ) or ( Point.z < Stop.z and Point.z > Start.z);
 
-	return (x and y and z);
+	return (x and y and z)
 end
 
 /*
 	Returns: players in vault, players in bank, guards in bank
 */
 local function getPlayersInBank()	
-	local pos1 = bankConfig.bank[1];
-	local pos2 = bankConfig.bank[2];
-	local pos3 = bankConfig.vault[1];
-	local pos4 = bankConfig.vault[2];
+	local pos1 = bankConfig.bank[1]
+	local pos2 = bankConfig.bank[2]
+	local pos3 = bankConfig.vault[1
+	local pos4 = bankConfig.vault[2]
 
 	local pInBank  = {}
 	local pInVault = {}
@@ -112,6 +116,7 @@ local function getPlayersInBank()
 	return pInVault, pInBank, guardsInBank
 end
 
+/* Begin the raiding procedure */
 local function doBreakInto()
 	local robTime = bankConfig.robTime
 
@@ -140,6 +145,7 @@ local function doBreakInto()
 	end)
 end
 
+/* This hook is ran every server tick. The hooked function does the logic for determining if the bank should be raided or not. */
 hook.Add("Think", "DetectPlayerInBank", function()
 	local pInVault, pInBank, guardsInBank = getPlayersInBank()
 
