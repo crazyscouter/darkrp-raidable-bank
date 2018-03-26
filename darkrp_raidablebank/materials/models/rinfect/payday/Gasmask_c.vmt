@@ -1,0 +1,10 @@
+"VertexLitGeneric"
+{
+	"$baseTexture" "models\rinfect\payday\Gasmask_c"
+	"$nocull" 1
+	"$model" "1"
+	"$phong" "1"
+	"$phongexponent" "17"
+	"$phongboost" "12"	
+	"$phongfresnelranges"	"[.05 0.1 0.3]"
+}

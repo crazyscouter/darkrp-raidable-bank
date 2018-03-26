@@ -1,5 +1,16 @@
 if (CLIENT) then return end
 
+resource.AddFile('models/rinfect/payday/PAYDAY_AME.mdl')
+resource.AddFile('models/rinfect/payday/PAYDAY_DINO.mdl')
+resource.AddFile('models/rinfect/payday/PAYDAY_GAS.mdl')
+
+resource.AddFile('materials/models/rinfect/payday/ame_c.vmt')
+resource.AddFile('materials/models/rinfect/payday/ame_n.vtf')
+resource.AddFile('materials/models/rinfect/payday/Dino_c.vmt')
+resource.AddFile('materials/models/rinfect/payday/Dino_n.vtf')
+resource.AddFile('materials/models/rinfect/payday/Gasmask_c.vmt')
+resource.AddFile('materials/models/rinfect/payday/gasmask_n.vtf')
+
 ndoc.table.rBank = ndoc.table.rBank or {}
 ndoc.table.rBank.players = {}
 ndoc.table.rBank.currency = ndoc.table.rBank.currency or bankConfig.initialMoney
@@ -8,14 +19,10 @@ ndoc.table.rBank.inVault = 0
 
 local inVault, beingRobbed = false, false
 
-AddCSLuaFile("cl_bank.lua")
-AddCSLuaFile("sh_bank.lua")
-include("sh_bank.lua")
+AddCSLuaFile("cl_bank.lua");
+AddCSLuaFile("sh_bank.lua");
+include("sh_bank.lua");
 
-
-/*
-	Meta functions.
-*/
 local meta = FindMetaTable("Player")
 
 function meta:isBankGuard()
@@ -42,41 +49,51 @@ function meta:stripGuardWeapons()
 	self.hasGuardWeapons = false
 end
 
+
 hook.Add("InitPostEntity", "StartBankStuff", function()
 	
 	timer.Create("bank_growthTimer", bankConfig.moneyGrowthTime, 0, function()
 		local moneyCur = ndoc.table.rBank.currency + bankConfig.moneyGrowth //We can continue to update as long as it is still good.
 		
-		if (moneyCur > bankConfig.maxMoney) then return end
+		if (moneyCur > bankConfig.maxMoney or beingRobbed or inVault) then return end
 		
 		ndoc.table.rBank.currency = moneyCur
 		
 	end)
 end)
 
-/* Computes if a point is within a lower corner and upper corner.*/
+
+/* From Facepunch */
 local function WithinAABB( Start, Stop, Point )
 	local x = (Point.x > Stop.x and Point.x < Start.x ) or ( Point.x < Stop.x and Point.x > Start.x);
 	local y = (Point.y > Stop.y and Point.y < Start.y ) or ( Point.y < Stop.y and Point.y > Start.y);
 	local z = (Point.z > Stop.z and Point.z < Start.z ) or ( Point.z < Stop.z and Point.z > Start.z);
 
-	return (x and y and z)
+	return (x and y and z);
+end
+
+local function isRobber(ply)
+	if (table.HasValue(bankConfig.restrictedTeams, ply:Team() )) then return false end
+	
+	return true
 end
 
 /*
 	Returns: players in vault, players in bank, guards in bank
 */
 local function getPlayersInBank()	
-	local pos1 = bankConfig.bank[1]
-	local pos2 = bankConfig.bank[2]
-	local pos3 = bankConfig.vault[1
-	local pos4 = bankConfig.vault[2]
+	local pos1 = bankConfig.bank[1];
+	local pos2 = bankConfig.bank[2];
+	local pos3 = bankConfig.vault[1];
+	local pos4 = bankConfig.vault[2];
 
 	local pInBank  = {}
 	local pInVault = {}
 	local guardsInBank = {}
 	
 	for k,v in pairs(player.GetAll()) do
+		if (!isRobber(v)) then continue end
+
 		if (WithinAABB(pos3, pos4, v:GetPos())) then
 			
 			if (v:isBankGuard()) then
@@ -86,7 +103,9 @@ local function getPlayersInBank()
 			end
 
 			if (ndoc.table.rBank.players[ v ] == nil) then
-				ndoc.table.rBank.players[ v ] = v:isBankGuard() and 1 or 2
+				local stat = v:isBankGuard() and 1 or 2
+
+				ndoc.table.rBank.players[ v ] = stat
 			end
 
 			continue
@@ -99,7 +118,10 @@ local function getPlayersInBank()
 			end
 
 			if (ndoc.table.rBank.players[ v ] == nil) then
-				ndoc.table.rBank.players[ v ] = v:isBankGuard() and 1 or 2
+				local stat = v:isBankGuard() and 1 or 2
+
+				ndoc.table.rBank.players[ v ] = stat
+
 			end
 
 			continue
@@ -116,7 +138,6 @@ local function getPlayersInBank()
 	return pInVault, pInBank, guardsInBank
 end
 
-/* Begin the raiding procedure */
 local function doBreakInto()
 	local robTime = bankConfig.robTime
 
@@ -136,6 +157,7 @@ local function doBreakInto()
 
 			for k,v in pairs(combined) do
 				v:addMoney(moneyPP)
+				v:PrintMessage(HUD_PRINTCENTER, "You robbed the bank for $"..string.Comma(math.Round(moneyPP)))
 			end
 
 			ndoc.table.rBank.currency = bankConfig.initialMoney
@@ -145,7 +167,6 @@ local function doBreakInto()
 	end)
 end
 
-/* This hook is ran every server tick. The hooked function does the logic for determining if the bank should be raided or not. */
 hook.Add("Think", "DetectPlayerInBank", function()
 	local pInVault, pInBank, guardsInBank = getPlayersInBank()
 
@@ -175,6 +196,7 @@ hook.Add("Think", "DetectPlayerInBank", function()
 		end
 
 	else
+
 		if (inVault && #pInVault == 0) then
 			inVault = false
 			ndoc.table.rBank.inVault = 0
@@ -188,6 +210,8 @@ hook.Add("Think", "DetectPlayerInBank", function()
 		if (!beingRobbed && !inVault) then
 			--DONE RAIDING
 			timer.Destroy('bankTimeLeft')
+			beingRobbed = false
+
 		end
 	end
 end)
